@@ -258,7 +258,7 @@ A capability has exactly one owner. Other code MUST call the owner and MUST NOT 
 
 ### 5.4 Atomic write
 
-`write_atomic(dir, name, bytes, mode)`:
+`write_atomic(dir, name, bytes, mode, purpose, point)`:
 
 1. Create a temporary file in `dir` (§5.3).
 2. Write `bytes`, set `mode` on the descriptor (Unix), `fsync` the file.
@@ -267,7 +267,9 @@ A capability has exactly one owner. Other code MUST call the owner and MUST NOT 
 
 On Windows, step 2 flushes through a writable handle (`FlushFileBuffers`), step 3 is the handle rename of §5.9 rule 2 (`FileRenameInformationEx` with POSIX semantics, falling back to `FileRenameInformation`), and step 4 is skipped: NTFS and ReFS journal the rename metadata.
 
-`create_exclusive_atomic(dir, name, bytes)` is the no-replace variant used for the machine key: steps 1 and 2, then `renameat2(RENAME_NOREPLACE)` on Linux, `renamex_np(RENAME_EXCL)` on macOS, and on Windows the handle rename of §5.9 rule 2 without `FILE_RENAME_REPLACE_IF_EXISTS` (falling back to `FileRenameInformation` with `ReplaceIfExists` false). If the filesystem does not support the no-replace rename, it falls back to `linkat` plus `unlinkat` of the temporary file. If neither works, it fails with `unsupported_filesystem`. If the target exists, the caller receives `AlreadyExists` and reads the existing file.
+`create_exclusive_atomic(dir, name, bytes, purpose, point)` is the no-replace variant used for the machine key: steps 1 and 2, then `renameat2(RENAME_NOREPLACE)` on Linux, `renameatx_np(RENAME_EXCL)` on macOS, and on Windows the handle rename of §5.9 rule 2 without `FILE_RENAME_REPLACE_IF_EXISTS` (falling back to `FileRenameInformation` with `ReplaceIfExists` false). If the filesystem does not support the no-replace rename, it falls back to `linkat` plus `unlinkat` of the temporary file. If neither works, it fails with `unsupported_filesystem`. If the target exists, the caller receives `AlreadyExists` and reads the existing file.
+
+`purpose` is the `<purpose>` of the temporary file name (§5.3) and `point` the caller's durability point (§5.8), so every flush they make names its point.
 
 ### 5.5 Symlink-safe access
 
@@ -295,7 +297,7 @@ On Windows, step 2 flushes through a writable handle (`FlushFileBuffers`), step 
 
 ### 5.8 Durability points
 
-Remora MUST `fsync` at exactly these points (D-22). On Windows, file flushes apply and directory flushes are skipped (§5.4).
+Remora MUST `fsync` at exactly these points (D-22). On macOS every flush is `F_FULLFSYNC`, because `fsync` there can leave the data in the drive's cache. On Windows, file flushes apply and directory flushes are skipped (§5.4).
 
 | # | After | Flush |
 |---|---|---|

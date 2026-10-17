@@ -4,7 +4,7 @@ use crate::Error;
 use crate::nofollow::{Entry, FileKind, Metadata, Timestamp};
 use crate::sys::Dir;
 use crate::sys::name::check_name;
-use rustix::fs::{AtFlags, FileType, Mode, OFlags, Stat, Timespec, Timestamps};
+use rustix::fs::{AtFlags, FileType, Mode, OFlags, RenameFlags, Stat, Timespec, Timestamps};
 use rustix::io::Errno;
 use std::ffi::OsStr;
 use std::fs::File;
@@ -138,6 +138,76 @@ pub(crate) fn set_times_at(
         &times,
         AtFlags::SYMLINK_NOFOLLOW,
     )?)
+}
+
+/// `renameat2(RENAME_NOREPLACE)` on Linux, `renameatx_np(RENAME_EXCL)` on macOS:
+/// an existing `to` fails with `AlreadyExists`. A filesystem without the flag is
+/// `Unsupported`.
+pub(crate) fn rename_no_replace(
+    from_dir: &Dir,
+    from: &OsStr,
+    to_dir: &Dir,
+    to: &OsStr,
+) -> Result<(), Error> {
+    check_name(from)?;
+    check_name(to)?;
+    rustix::fs::renameat_with(from_dir, from, to_dir, to, RenameFlags::NOREPLACE)
+        .map_err(|e| unsupported_if(e, no_replace_unsupported(e)))?;
+    Ok(())
+}
+
+/// Whether `renameat_with` failed because the filesystem has no no-replace rename.
+fn no_replace_unsupported(e: Errno) -> bool {
+    #[cfg(target_os = "linux")]
+    return e == Errno::INVAL || e == Errno::NOSYS || e == Errno::OPNOTSUPP;
+    #[cfg(target_os = "macos")]
+    return e == Errno::NOTSUP;
+}
+
+/// `linkat(from_dir, from, to_dir, to, 0)`: a second name for the file `from`. An
+/// existing `to` fails with `AlreadyExists`; a filesystem without hard links (FAT)
+/// is `Unsupported`.
+pub(crate) fn link_at(from_dir: &Dir, from: &OsStr, to_dir: &Dir, to: &OsStr) -> Result<(), Error> {
+    check_name(from)?;
+    check_name(to)?;
+    rustix::fs::linkat(from_dir, from, to_dir, to, AtFlags::empty()).map_err(|e| {
+        unsupported_if(
+            e,
+            e == Errno::PERM || e == Errno::OPNOTSUPP || e == Errno::NOTSUP,
+        )
+    })?;
+    Ok(())
+}
+
+fn unsupported_if(e: Errno, unsupported: bool) -> io::Error {
+    if unsupported {
+        io::Error::new(io::ErrorKind::Unsupported, io::Error::from(e))
+    } else {
+        e.into()
+    }
+}
+
+/// `fchmod(file, mode)`. A mode beyond `mode_t` (16 bits on macOS) is
+/// `InvalidInput`.
+#[allow(
+    clippy::useless_conversion,
+    reason = "mode_t is u32 on Linux and u16 on macOS"
+)]
+pub(crate) fn set_mode(file: &File, mode: u32) -> io::Result<()> {
+    let mode = mode
+        .try_into()
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "mode out of range"))?;
+    Ok(rustix::fs::fchmod(file, Mode::from_raw_mode(mode))?)
+}
+
+/// Flushes the entries of `dir` to storage: `fsync` on Linux, `F_FULLFSYNC` on
+/// macOS, where `fsync` can leave them in the drive's cache. `File::sync_all` makes
+/// the same choice for files.
+pub(crate) fn sync_dir(dir: &Dir) -> io::Result<()> {
+    #[cfg(target_os = "linux")]
+    return Ok(rustix::fs::fsync(dir)?);
+    #[cfg(target_os = "macos")]
+    return Ok(rustix::fs::fcntl_fullfsync(dir)?);
 }
 
 fn timespec(t: Timestamp) -> Timespec {
