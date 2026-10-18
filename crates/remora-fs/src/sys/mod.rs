@@ -17,6 +17,7 @@ compile_error!("remora-fs supports Linux, macOS and Windows only");
 pub(crate) mod at;
 mod create;
 mod dir;
+mod final_path;
 mod name;
 #[cfg(windows)]
 mod nt;
@@ -28,6 +29,7 @@ mod umask;
 
 pub(crate) use create::{create_dir, create_file};
 pub use dir::Dir;
+pub(crate) use final_path::final_path;
 pub(crate) use name::{check_name, name_from_bytes};
 #[cfg(unix)]
 pub(crate) use umask::ScopedUmask;
@@ -62,6 +64,15 @@ pub(crate) mod test_dir {
             std::fs::create_dir_all(&path).unwrap();
             path
         }
+    }
+
+    /// Creates a symlink to the directory `target`. Windows needs the symlink
+    /// privilege or developer mode.
+    pub(crate) fn symlink_dir(target: &Path, link: &Path) -> std::io::Result<()> {
+        #[cfg(unix)]
+        return std::os::unix::fs::symlink(target, link);
+        #[cfg(windows)]
+        return std::os::windows::fs::symlink_dir(target, link);
     }
 
     impl Drop for TestDir {

@@ -133,6 +133,7 @@ dependencies = [
 name = "remora-fs"
 version = "0.0.0"
 dependencies = [
+ "camino",
  "libc",
  "remora-types",
  "rustix",

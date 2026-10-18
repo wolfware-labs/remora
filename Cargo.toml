@@ -39,3 +39,4 @@ remora-ipc = { path = "crates/remora-ipc", version = "0.0.0" }
 remora-daemon = { path = "crates/remora-daemon", version = "0.0.0" }
 remora-host = { path = "crates/remora-host", version = "0.0.0" }
 remora-testkit = { path = "crates/remora-testkit" }
+camino = "1.2.6"

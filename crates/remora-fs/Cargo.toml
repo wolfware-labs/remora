@@ -23,6 +23,7 @@ undocumented_unsafe_blocks = "deny"
 sqlite = []
 
 [dependencies]
+camino.workspace = true
 remora-types.workspace = true
 
 [target.'cfg(unix)'.dependencies]

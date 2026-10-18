@@ -5,6 +5,7 @@ pub mod atomic;
 pub mod durable;
 mod error;
 pub mod nofollow;
+pub mod path;
 pub mod private;
 
 pub use error::Error;
