@@ -278,6 +278,32 @@ mod tests {
         agrees_with_filesystem(tmp.path(), |_, _| None);
     }
 
+    /// Every mapping of the table, checked on APFS. APFS refuses a name with a
+    /// code point newer than its own Unicode tables, so those are counted, not
+    /// checked.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn fold_table_matches_apfs() {
+        let tmp = TestDir::new();
+        if !crate::sys::test_dir::case_insensitive(tmp.path()) {
+            eprintln!("skipped: the volume is case-sensitive");
+            return;
+        }
+        let (mut checked, mut refused) = (0, 0);
+        for &(from, to) in FULL_FOLD {
+            let name = tmp.path().join(from.to_string());
+            if std::fs::write(&name, b"").is_err() {
+                refused += 1;
+                continue;
+            }
+            let code = u32::from(from);
+            assert!(tmp.path().join(to).exists(), "U+{code:04X} -> {to:?}");
+            std::fs::remove_file(&name).unwrap();
+            checked += 1;
+        }
+        assert!(checked > 1500, "{checked} checked, {refused} refused");
+    }
+
     #[cfg(windows)]
     #[test]
     fn ordinal_matches_ntfs() {

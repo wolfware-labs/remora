@@ -7,8 +7,10 @@ use std::io;
 /// Whether `dir` treats `a` and `A` as two names.
 ///
 /// - macOS: `fpathconf(_PC_CASE_SENSITIVE)`.
-/// - Windows: the directory's `FILE_CS_FLAG_CASE_SENSITIVE_DIR`. A volume
-///   that has no per-directory flag answers with `FILE_CASE_SENSITIVE_SEARCH`.
+/// - Windows: the directory's `FILE_CS_FLAG_CASE_SENSITIVE_DIR`. On a volume
+///   without the per-directory flag, Win32 looks names up case-insensitively.
+///   (`FILE_CASE_SENSITIVE_SEARCH` only says a volume can keep case-distinct
+///   names; NTFS sets it.)
 /// - Linux: case-sensitive unless the directory has `FS_CASEFOLD_FL`. A
 ///   filesystem without inode flags (`ENOTTY`, `EOPNOTSUPP`) has no casefold
 ///   either.
@@ -57,21 +59,19 @@ mod imp {
     use super::Dir;
     use crate::sys::at::query;
     use std::io;
-    use std::os::windows::io::{AsHandle, AsRawHandle};
+    use std::os::windows::io::AsHandle;
     use windows_sys::Win32::Foundation::{
         ERROR_INVALID_FUNCTION, ERROR_INVALID_PARAMETER, ERROR_NOT_SUPPORTED,
     };
     use windows_sys::Win32::Storage::FileSystem::{
-        FILE_CASE_SENSITIVE_INFO, FileCaseSensitiveInfo, GetVolumeInformationByHandleW,
+        FILE_CASE_SENSITIVE_INFO, FileCaseSensitiveInfo,
     };
-    use windows_sys::Win32::System::SystemServices::{
-        FILE_CASE_SENSITIVE_SEARCH, FILE_CS_FLAG_CASE_SENSITIVE_DIR,
-    };
+    use windows_sys::Win32::System::SystemServices::FILE_CS_FLAG_CASE_SENSITIVE_DIR;
 
     pub(super) fn case_sensitive(dir: &Dir) -> io::Result<bool> {
         match query::<FILE_CASE_SENSITIVE_INFO>(dir.as_handle(), FileCaseSensitiveInfo) {
             Ok(info) => Ok(info.Flags & FILE_CS_FLAG_CASE_SENSITIVE_DIR != 0),
-            Err(e) if unsupported(&e) => Ok(volume_flags(dir)? & FILE_CASE_SENSITIVE_SEARCH != 0),
+            Err(e) if unsupported(&e) => Ok(false),
             Err(e) => Err(e),
         }
     }
@@ -86,29 +86,6 @@ mod imp {
         ]
         .iter()
         .any(|&code| e.raw_os_error() == i32::try_from(code).ok())
-    }
-
-    fn volume_flags(dir: &Dir) -> io::Result<u32> {
-        let mut flags = 0;
-        // SAFETY: the handle is open for the call, borrowed from `dir`; `flags` is
-        // writable; the name buffers are null with a size of 0, which the call
-        // documents as "not requested", and so are the other out-pointers.
-        let ok = unsafe {
-            GetVolumeInformationByHandleW(
-                dir.as_handle().as_raw_handle(),
-                std::ptr::null_mut(),
-                0,
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                &raw mut flags,
-                std::ptr::null_mut(),
-                0,
-            )
-        };
-        if ok == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(flags)
     }
 }
 
