@@ -66,6 +66,15 @@ pub(crate) mod test_dir {
         }
     }
 
+    /// Creates a symlink to the directory `target`. Windows needs the symlink
+    /// privilege or developer mode.
+    pub(crate) fn symlink_dir(target: &Path, link: &Path) -> std::io::Result<()> {
+        #[cfg(unix)]
+        return std::os::unix::fs::symlink(target, link);
+        #[cfg(windows)]
+        return std::os::windows::fs::symlink_dir(target, link);
+    }
+
     impl Drop for TestDir {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);

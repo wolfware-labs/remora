@@ -132,18 +132,8 @@ mod imp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sys::test_dir::TestDir;
+    use crate::sys::test_dir::{TestDir, symlink_dir};
     use std::fs::File;
-
-    #[cfg(unix)]
-    fn symlink_dir(target: &Path, link: &Path) -> io::Result<()> {
-        std::os::unix::fs::symlink(target, link)
-    }
-
-    #[cfg(windows)]
-    fn symlink_dir(target: &Path, link: &Path) -> io::Result<()> {
-        std::os::windows::fs::symlink_dir(target, link)
-    }
 
     /// Reopens the handle as a `File` to inspect what it refers to.
     fn reopen(dir: &Dir) -> File {

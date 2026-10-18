@@ -17,8 +17,10 @@ use std::path::{Component, Path, PathBuf};
 /// deepest existing ancestor is canonicalized and the missing components are
 /// appended unchanged, except that `.` is dropped and `..` is refused with
 /// `InvalidInput`. On Windows, Win32 resolves `..` by name before the open, so a
-/// missing component followed by `..` is never reached. An existing ancestor that
-/// is not a directory fails with `NotADirectory`.
+/// missing component followed by `..` is never reached; in a verbatim path
+/// (`\\?\`), which Win32 passes on as is, `.` is dropped and `..` refused
+/// anywhere. An existing ancestor that is not a directory fails with
+/// `NotADirectory`.
 ///
 /// On macOS, a regular file that cannot be opened read-only is spelled as its
 /// canonical parent plus the file name as given.
@@ -52,12 +54,7 @@ pub fn canonical(path: &Path) -> io::Result<PathBuf> {
         match existing.components().next_back() {
             Some(Component::Normal(name)) => missing.push(name.to_os_string()),
             Some(Component::CurDir) => {}
-            Some(Component::ParentDir) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "`..` after a component that does not exist",
-                ));
-            }
+            Some(Component::ParentDir) => return Err(dotdot_refused()),
             // The root or the prefix itself does not exist.
             Some(Component::RootDir | Component::Prefix(_)) | None => return Err(not_found),
         }
@@ -66,9 +63,8 @@ pub fn canonical(path: &Path) -> io::Result<PathBuf> {
 }
 
 /// A verbatim Windows path (`\\?\`) is passed to the filesystem as is, so `.` and
-/// `..` reach it as names: `.` is dropped and `..` refused, as for a missing tail.
-/// `Path::components` may report them as `CurDir` and `ParentDir` or as normal
-/// names, and `PathBuf::push` would resolve `..` by name, so every form is caught.
+/// `..` would reach it as names: `.` is dropped and `..` refused, as in a missing
+/// tail. Other paths are returned unchanged.
 fn without_verbatim_dots(path: &Path) -> io::Result<PathBuf> {
     let verbatim = matches!(
         path.components().next(),
@@ -78,26 +74,30 @@ fn without_verbatim_dots(path: &Path) -> io::Result<PathBuf> {
         return Ok(path.to_path_buf());
     }
     let mut out = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::CurDir => {}
-            Component::Normal(name) if name == "." => {}
-            Component::ParentDir => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "`..` in a verbatim path",
-                ));
-            }
-            Component::Normal(name) if name == ".." => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "`..` in a verbatim path",
-                ));
-            }
-            other => out.push(other),
+    for c in path.components().filter(|c| !is_dot(*c)) {
+        if is_dotdot(c) {
+            return Err(dotdot_refused());
         }
+        out.push(c);
     }
     Ok(out)
+}
+
+// `Path::components` can report `.` and `..` in a verbatim path as normal names,
+// so both forms count.
+fn is_dot(c: Component<'_>) -> bool {
+    matches!(c, Component::CurDir) || matches!(c, Component::Normal(n) if n == ".")
+}
+
+fn is_dotdot(c: Component<'_>) -> bool {
+    matches!(c, Component::ParentDir) || matches!(c, Component::Normal(n) if n == "..")
+}
+
+fn dotdot_refused() -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidInput,
+        "`..` after a component that does not exist, or in a verbatim path",
+    )
 }
 
 /// A regular file that exists but cannot be opened read-only: its canonical
@@ -160,24 +160,7 @@ impl From<io::Error> for CanonicalError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sys::test_dir::TestDir;
-
-    /// Creates a directory symlink, or returns `None` when the OS refuses (Windows
-    /// without the symlink privilege or developer mode).
-    fn symlink_dir(target: &Path, link: &Path) -> Option<()> {
-        #[cfg(unix)]
-        let made = std::os::unix::fs::symlink(target, link);
-        #[cfg(windows)]
-        let made = std::os::windows::fs::symlink_dir(target, link);
-        match made {
-            Ok(()) => Some(()),
-            Err(e) if cfg!(windows) => {
-                eprintln!("skipped: cannot create a symlink: {e}");
-                None
-            }
-            Err(e) => panic!("{e}"),
-        }
-    }
+    use crate::sys::test_dir::{TestDir, symlink_dir};
 
     /// Whether the directory's volume treats `a` and `A` as one name.
     #[cfg(any(target_os = "macos", windows))]
@@ -198,8 +181,13 @@ mod tests {
     fn symlinked_dir_resolves() {
         let tmp = TestDir::new();
         let real = tmp.mkdir_all("real/sub");
-        if symlink_dir(&tmp.path().join("real"), &tmp.path().join("link")).is_none() {
-            return;
+        match symlink_dir(&tmp.path().join("real"), &tmp.path().join("link")) {
+            Ok(()) => {}
+            Err(e) if cfg!(windows) => {
+                eprintln!("skipped: cannot create a symlink: {e}");
+                return;
+            }
+            Err(e) => panic!("{e}"),
         }
         let via = canonical(&tmp.path().join("link").join("sub")).unwrap();
         assert_eq!(via, canonical(&real).unwrap());
