@@ -15,6 +15,12 @@ pub enum CaseRule {
     Sensitive,
     /// NFD, full case folding, NFD again: case-insensitive APFS, which ignores the
     /// normalization form too, and a Linux directory with the casefold attribute.
+    ///
+    /// The table can be newer than the filesystem's own. Unicode keeps the folding
+    /// and the NFD of an assigned character stable across versions, so the only
+    /// difference is a newer code point that this rule folds and the filesystem
+    /// does not: two names equal here but distinct on disk. That refuses a restore
+    /// rather than missing a collision, and APFS refuses such names anyway.
     FoldNfd,
     /// Each UTF-16 unit upper-cased with the OS table, as
     /// `CompareStringOrdinal(a, b, TRUE)` does: NTFS and ReFS.
