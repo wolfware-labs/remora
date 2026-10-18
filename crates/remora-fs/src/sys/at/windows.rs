@@ -629,7 +629,7 @@ fn substitute_name(buf: &[u8]) -> io::Result<Vec<u16>> {
 }
 
 /// Reads one information class into a value of the type that class fills.
-fn query<T: Default>(
+pub(crate) fn query<T: Default>(
     handle: BorrowedHandle<'_>,
     class: FILE_INFO_BY_HANDLE_CLASS,
 ) -> io::Result<T> {
@@ -647,7 +647,7 @@ fn query<T: Default>(
 }
 
 /// Writes one information class from a value of the type that class takes.
-fn set_info<T>(
+pub(crate) fn set_info<T>(
     handle: BorrowedHandle<'_>,
     class: FILE_INFO_BY_HANDLE_CLASS,
     value: &T,

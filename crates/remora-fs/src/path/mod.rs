@@ -1,5 +1,11 @@
 //! Path canonicalization (spec 5.6): one spelling for every path that is compared,
-//! hashed or recorded (D-10).
+//! hashed or recorded (D-10), and the case-folding comparison of names on the
+//! volume that holds them.
+
+mod case;
+mod fold_table;
+
+pub use case::{CaseRule, case_rule, eq_on, fold_key};
 
 use crate::sys;
 use camino::Utf8PathBuf;
@@ -162,15 +168,6 @@ mod tests {
     use super::*;
     use crate::sys::test_dir::{TestDir, symlink_dir};
 
-    /// Whether the directory's volume treats `a` and `A` as one name.
-    #[cfg(any(target_os = "macos", windows))]
-    fn case_insensitive(dir: &Path) -> bool {
-        std::fs::write(dir.join("probe"), b"").unwrap();
-        let found = dir.join("PROBE").exists();
-        std::fs::remove_file(dir.join("probe")).unwrap();
-        found
-    }
-
     #[test]
     fn relative_path_refused() {
         let err = canonical(Path::new("relative/dir")).unwrap_err();
@@ -204,7 +201,7 @@ mod tests {
     #[test]
     fn wrong_case_returns_on_disk_case() {
         let tmp = TestDir::new();
-        if !case_insensitive(tmp.path()) {
+        if !crate::sys::test_dir::case_insensitive(tmp.path()) {
             eprintln!("skipped: case-sensitive volume");
             return;
         }

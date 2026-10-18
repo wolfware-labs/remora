@@ -4,3 +4,7 @@ Copyright (c) 2026 Wolfware LLC
 This software is dual-licensed under the MIT license and the Apache License,
 Version 2.0, at your option. See LICENSE-MIT and LICENSE-APACHE for the full
 terms.
+
+crates/remora-fs/src/path/fold_table.rs is generated from xtask/data/CaseFolding.txt
+of the Unicode Character Database, Copyright (c) 1991-2026 Unicode, Inc.,
+distributed under the Unicode License v3 (https://www.unicode.org/license.txt).

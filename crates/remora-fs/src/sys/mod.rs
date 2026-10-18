@@ -15,6 +15,7 @@
 compile_error!("remora-fs supports Linux, macOS and Windows only");
 
 pub(crate) mod at;
+mod case;
 mod create;
 mod dir;
 mod final_path;
@@ -27,6 +28,13 @@ pub(crate) mod security;
 #[cfg(unix)]
 mod umask;
 
+pub(crate) use case::case_sensitive;
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) use case::set_casefold;
+#[cfg(windows)]
+pub(crate) use case::upcase;
+#[cfg(all(test, windows))]
+pub(crate) use case::{compare_ordinal, set_case_sensitive};
 pub(crate) use create::{create_dir, create_file};
 pub use dir::Dir;
 pub(crate) use final_path::final_path;
@@ -64,6 +72,15 @@ pub(crate) mod test_dir {
             std::fs::create_dir_all(&path).unwrap();
             path
         }
+    }
+
+    /// Whether the directory at `dir` treats `a` and `A` as one name, by asking
+    /// the filesystem.
+    pub(crate) fn case_insensitive(dir: &Path) -> bool {
+        std::fs::write(dir.join("probe"), b"").unwrap();
+        let found = dir.join("PROBE").exists();
+        std::fs::remove_file(dir.join("probe")).unwrap();
+        found
     }
 
     /// Creates a symlink to the directory `target`. Windows needs the symlink

@@ -95,6 +95,9 @@ jobs:
       - name: xtask layers
         if: ${{ !cancelled() }}
         run: cargo xtask layers
+      - name: xtask fold-table
+        if: ${{ !cancelled() }}
+        run: cargo xtask fold-table --check
       - name: cargo deny
         if: ${{ !cancelled() }}
         run: cargo deny check
@@ -181,7 +184,8 @@ jobs:
             img="$RUNNER_TEMP/$fs.img"
             truncate -s 1G "$img"
             case "$fs" in
-              ext4) sudo mkfs.ext4 -q -F "$img" ;;
+              # casefold lets a test give a directory FS_CASEFOLD_FL.
+              ext4) sudo mkfs.ext4 -q -F -O casefold "$img" ;;
               btrfs) sudo mkfs.btrfs -q "$img" ;;
               xfs) sudo mkfs.xfs -q -m reflink=1 "$img" ;;
             esac
@@ -218,4 +222,5 @@ jobs:
         env:
           REMORA_TEST_FS: /mnt/ext4
           REMORA_EXPECT_CLONES: "0"
+          REMORA_EXPECT_CASEFOLD: "1"
         run: .github/scripts/test-on-fs.sh ext2/ext3
