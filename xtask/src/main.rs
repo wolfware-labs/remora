@@ -3,6 +3,7 @@
 // Developer tool: a failed unwrap is a failed check.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+mod fold_table;
 mod layers;
 
 use std::path::Path;
@@ -10,7 +11,7 @@ use std::process::ExitCode;
 
 use cargo_metadata::MetadataCommand;
 
-const USAGE: &str = "usage: cargo xtask layers";
+const USAGE: &str = "usage: cargo xtask layers | fold-table [--check]";
 
 /// `cargo metadata --no-deps` for the workspace that contains this crate.
 fn metadata_command() -> MetadataCommand {
@@ -42,9 +43,27 @@ fn run_layers() -> ExitCode {
     }
 }
 
+fn run_fold_table(check: bool) -> ExitCode {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    match fold_table::run(&root, check) {
+        Ok(report) => {
+            println!("{report}");
+            ExitCode::SUCCESS
+        }
+        Err(err) => {
+            eprintln!("fold-table: {err}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 fn main() -> ExitCode {
-    match std::env::args().nth(1).as_deref() {
-        Some("layers") => run_layers(),
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    match args[..] {
+        ["layers"] => run_layers(),
+        ["fold-table"] => run_fold_table(false),
+        ["fold-table", "--check"] => run_fold_table(true),
         _ => {
             eprintln!("{USAGE}");
             ExitCode::from(2)

@@ -25,6 +25,10 @@ sqlite = []
 [dependencies]
 camino.workspace = true
 remora-types.workspace = true
+unicode-normalization.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1.1.5", default-features = false, features = ["std", "fs", "process", "rand"] }
@@ -37,6 +41,7 @@ libc = "0.2"
 windows-sys = { version = "0.61.2", features = [
     "Wdk_Foundation",
     "Wdk_Storage_FileSystem",
+    "Wdk_System_SystemServices",
     "Win32_Foundation",
     "Win32_Security",
     "Win32_Security_Authorization",
@@ -47,3 +52,7 @@ windows-sys = { version = "0.61.2", features = [
     "Win32_System_SystemServices",
     "Win32_System_Threading",
 ] }
+
+# `CompareStringOrdinal`, the reference the Windows case tests check against.
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Globalization"] }
