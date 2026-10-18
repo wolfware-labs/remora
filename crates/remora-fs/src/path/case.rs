@@ -164,16 +164,24 @@ mod tests {
         assert!(FULL_FOLD.windows(2).all(|w| w[0].0 < w[1].0));
     }
 
+    /// The rule matches what the filesystem does with `probe` and `PROBE`, so a
+    /// case-sensitive APFS volume or a casefold directory reads correctly too.
+    /// The CI runners have the defaults: case-insensitive on macOS and Windows,
+    /// case-sensitive on Linux.
     #[test]
     fn case_rule_per_os() {
         let tmp = TestDir::new();
         let rule = case_rule(&Dir::open(tmp.path()).unwrap()).unwrap();
-        #[cfg(target_os = "linux")]
-        assert_eq!(rule, Sensitive);
-        #[cfg(target_os = "macos")]
-        assert_eq!(rule, FoldNfd);
+        #[cfg(unix)]
+        let insensitive = FoldNfd;
         #[cfg(windows)]
-        assert_eq!(rule, Ordinal);
+        let insensitive = Ordinal;
+        let expected = if crate::sys::test_dir::case_insensitive(tmp.path()) {
+            insensitive
+        } else {
+            Sensitive
+        };
+        assert_eq!(rule, expected);
     }
 
     #[test]
