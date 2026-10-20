@@ -38,7 +38,7 @@ jobs:
          github.event.comment.body == 'I have read the CLA document and I hereby sign the CLA'))
     steps:
       - name: Check CLA signatures
-        uses: wolfware-labs/cla-action@c14e53c86af3e9583c1e0020e6d2f365e5016eb4 # main, 2026-10-14
+        uses: wolfware-labs/cla-action@b6d76d6d4df2567b9369a675f63b4d8bc6f50c7c # main, 2026-10-14
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
